@@ -7,18 +7,17 @@ import axios from 'axios';
 import cors from 'cors';
 
 const app = express();
-const port = 3001;
 const HARD_CODED_MINT = '6PNDuznRwYkr7m5r8jBhJ9cf53EYu9nx8g7yhsv8vcuu';
 const PUMP_API_KEY = process.env.PUMP_API_KEY;
 
-// SQLite setup
+// SQLite setup (in-memory, reset per invocation)
 const db = new sqlite3.Database(':memory:');
 db.serialize(() => {
   db.run('CREATE TABLE IF NOT EXISTS mcap (mint TEXT PRIMARY KEY, value REAL, solPrice REAL, timestamp INTEGER)');
   db.run('INSERT OR REPLACE INTO mcap (mint, value, solPrice, timestamp) VALUES (?, 0, 150, ?)', [HARD_CODED_MINT, Date.now()]);
 });
 
-// In-memory cache
+// In-memory cache (reset per invocation)
 let mcapCache = { mcap: 0, solPrice: 150, timestamp: Date.now(), error: 'No data yet' };
 
 // Middleware
@@ -60,7 +59,7 @@ const fetchPumpPortalMcap = async () => {
   }
 };
 
-// WebSocket for PumpPortal
+// WebSocket for PumpPortal (runs per invocation, limited in serverless)
 let lastValidMcap = 0;
 let lastWsUpdate = Date.now();
 const connectWebSocket = () => {
@@ -85,8 +84,7 @@ const connectWebSocket = () => {
       calculatedMcap = parseFloat(trade.marketCapSol) * solPrice;
       source = 'WebSocket marketCapSol';
       console.log('Using WebSocket marketCapSol:', trade.marketCapSol, 'MCAP:', calculatedMcap);
-    }
-    else if (trade.vTokensInBondingCurve && trade.vSolInBondingCurve) {
+    } else if (trade.vTokensInBondingCurve && trade.vSolInBondingCurve) {
       const tokensMinted = trade.vTokensInBondingCurve / 1e6;
       const solMinted = trade.vSolInBondingCurve / 1e9;
       console.log('Tokens minted:', tokensMinted, 'SOL minted:', solMinted);
@@ -130,6 +128,7 @@ const connectWebSocket = () => {
   });
 };
 
+// Fallback to REST if no WebSocket updates
 setInterval(async () => {
   if (Date.now() - lastWsUpdate > 30000) {
     console.log('No WebSocket updates for 30s. Fetching from PumpPortal REST API.');
@@ -155,10 +154,12 @@ setInterval(async () => {
   }
 }, 10000);
 
+// Start WebSocket and SOL price fetch
 connectWebSocket();
 fetchSolPrice();
 setInterval(fetchSolPrice, 60000);
 
+// API endpoint
 app.get('/api/mcap', (req, res) => {
   if (Date.now() - mcapCache.timestamp < 5000) {
     console.log('Serving cached MCAP:', mcapCache);
@@ -184,6 +185,5 @@ app.get('/api/mcap', (req, res) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
+// Export for Vercel serverless
+export default app;
