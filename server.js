@@ -36,7 +36,7 @@ const fetchSolPrice = async () => {
   }
 };
 
-// Fallback to PumpPortal REST API
+// Fetch MCAP from PumpPortal REST API
 const fetchPumpPortalMcap = async () => {
   try {
     const res = await axios.get(`https://api-v2.pump.fun/tokens/${HARD_CODED_MINT}`, {
@@ -59,7 +59,7 @@ const fetchPumpPortalMcap = async () => {
   }
 };
 
-// WebSocket for PumpPortal (runs per invocation, limited in serverless)
+// WebSocket for PumpPortal (limited in serverless)
 let lastValidMcap = 0;
 let lastWsUpdate = Date.now();
 const connectWebSocket = () => {
